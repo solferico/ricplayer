@@ -6,17 +6,18 @@
 <title>RicPlayer player (hosted)</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 1920px; height: 1080px; background: #000; overflow: hidden;
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden;
                font-family: Arial, Helvetica, sans-serif; color: #fff; }
-  #player { position: absolute; inset: 0; width: 1920px; height: 1080px; }
+  #player { position: absolute; inset: 0; width: 100vw; height: 100vh; }
+  /* Sized in vw/vh so the box is a big fraction of the screen at ANY resolution. */
   #hud {
-    position: absolute; top: 24px; left: 24px; z-index: 10;
-    width: 740px; box-sizing: border-box;
-    background: rgba(0,0,0,0.72); border: 2px solid #3ea6ff; border-radius: 12px;
-    padding: 18px 24px; line-height: 1.4; font-size: 26px;
+    position: absolute; top: 2.5vh; left: 2vw; z-index: 10;
+    width: 64vw; box-sizing: border-box;
+    background: rgba(0,0,0,0.75); border: 0.3vh solid #3ea6ff; border-radius: 1.5vh;
+    padding: 2vh 2.2vw; line-height: 1.5; font-size: 2.6vh;
   }
-  #hud .big { font-size: 44px; font-weight: bold; color: #3ea6ff; margin-bottom: 6px; }
-  #hud .row { display: flex; justify-content: space-between; gap: 24px; margin-top: 4px; }
+  #hud .big { font-size: 5vh; font-weight: bold; color: #3ea6ff; margin-bottom: 1vh; }
+  #hud .row { display: flex; justify-content: space-between; gap: 2vw; margin-top: 0.8vh; }
   #hud .k { color: #9aa0a6; flex: 0 0 auto; }
   #hud .v { color: #fff; font-weight: bold; text-align: right; word-break: break-all; }
   #hud .err { color: #ff6b6b; font-weight: bold; }
@@ -57,7 +58,7 @@
 
   window.onYouTubeIframeAPIReady = function(){
     player = new YT.Player('player', {
-      width: '1920', height: '1080', videoId: current.id,
+      width: '100%', height: '100%', videoId: current.id,
       playerVars: (function(){
         var pv = { autoplay: 1, controls: 0, rel: 0, fs: 0, playsinline: 1, modestbranding: 1, iv_load_policy: 3 };
         if (HTTP_ORIGIN) pv.origin = HTTP_ORIGIN;
