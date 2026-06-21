@@ -11,12 +11,14 @@
   #player { position: absolute; inset: 0; width: 1920px; height: 1080px; }
   #hud {
     position: absolute; top: 24px; left: 24px; z-index: 10;
-    background: rgba(0,0,0,0.66); border: 2px solid #3ea6ff; border-radius: 12px;
-    padding: 20px 26px; min-width: 560px; line-height: 1.55; font-size: 30px;
+    width: 740px; box-sizing: border-box;
+    background: rgba(0,0,0,0.72); border: 2px solid #3ea6ff; border-radius: 12px;
+    padding: 18px 24px; line-height: 1.4; font-size: 26px;
   }
-  #hud .big { font-size: 52px; font-weight: bold; color: #3ea6ff; }
-  #hud .row { display: flex; justify-content: space-between; gap: 30px; }
-  #hud .k { color: #9aa0a6; } #hud .v { color: #fff; font-weight: bold; }
+  #hud .big { font-size: 44px; font-weight: bold; color: #3ea6ff; margin-bottom: 6px; }
+  #hud .row { display: flex; justify-content: space-between; gap: 24px; margin-top: 4px; }
+  #hud .k { color: #9aa0a6; flex: 0 0 auto; }
+  #hud .v { color: #fff; font-weight: bold; text-align: right; word-break: break-all; }
   #hud .err { color: #ff6b6b; font-weight: bold; }
 </style>
 </head>
