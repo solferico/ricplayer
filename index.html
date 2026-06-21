@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1920, height=1080">
+<title>YT iframe test</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; background: #000; overflow: hidden;
+               font-family: Arial, Helvetica, sans-serif; color: #fff; }
+
+  /* The YouTube iframe fills the whole screen → forces YT to offer max quality.
+     YT chooses resolution partly by player size, so full 1920x1080 matters. */
+  #player { position: absolute; inset: 0; width: 1920px; height: 1080px; }
+
+  /* HUD overlay on top of the video — this is the diagnostic. */
+  #hud {
+    position: absolute; top: 24px; left: 24px; z-index: 10;
+    background: rgba(0,0,0,0.66); border: 2px solid #3ea6ff; border-radius: 12px;
+    padding: 20px 26px; min-width: 560px; line-height: 1.55;
+    font-size: 30px; letter-spacing: .3px;
+  }
+  #hud .big { font-size: 52px; font-weight: bold; color: #3ea6ff; }
+  #hud .row { display: flex; justify-content: space-between; gap: 30px; }
+  #hud .k { color: #9aa0a6; }
+  #hud .v { color: #fff; font-weight: bold; }
+  #hud .err { color: #ff6b6b; font-weight: bold; }
+  #hint {
+    position: absolute; bottom: 24px; left: 24px; right: 24px; z-index: 10;
+    background: rgba(0,0,0,0.55); border-radius: 10px; padding: 14px 22px;
+    font-size: 24px; color: #cfd2d6;
+  }
+  .hl { color: #3ea6ff; font-weight: bold; }
+</style>
+</head>
+<body>
+  <div id="player"></div>
+
+  <div id="hud">
+    <div class="row"><span>Calidad ACTUAL</span></div>
+    <div class="big" id="curq">— cargando —</div>
+    <div class="row"><span class="k">Estado</span><span class="v" id="state">-</span></div>
+    <div class="row"><span class="k">Disponibles</span><span class="v" id="avail">-</span></div>
+    <div class="row"><span class="k">Buffer</span><span class="v" id="buf">-</span></div>
+    <div class="row"><span class="k">Tiempo</span><span class="v" id="time">-</span></div>
+    <div class="row"><span class="k">Vídeo</span><span class="v" id="vid">-</span></div>
+    <div class="row"><span class="k">Origen</span><span class="v" id="origin" style="font-size:22px">-</span></div>
+    <div class="row"><span class="err" id="err"></span></div>
+  </div>
+
+  <div id="hint">
+    <span class="hl">OK</span> play/pausa &nbsp;·&nbsp;
+    <span class="hl">←</span> -10s &nbsp;·&nbsp;
+    <span class="hl">→</span> +30s &nbsp;·&nbsp;
+    <span class="hl">Rojo/Verde/Amarillo/Azul</span> cambiar vídeo de prueba &nbsp;·&nbsp;
+    <span class="hl">BACK</span> recargar
+  </div>
+
+<script>
+  // ─────────────────────────────────────────────────────────────────
+  //  VÍDEOS DE PRUEBA  — mapeados a los 4 botones de color del mando.
+  //  Cambia estos IDs por vídeos de canales que TÚ ves normalmente,
+  //  para comprobar si TU contenido habitual permite embed a 1080p.
+  //  GREEN va fijo a Big Buck Bunny (Blender, 4K, sin bloqueos) como
+  //  ancla: si ESE no llega a 1080p, el problema es del entorno, no del vídeo.
+  // ─────────────────────────────────────────────────────────────────
+  var TEST = {
+    red:    { id: 'jNQXAC9IVRw', label: 'Me at the zoo (240p original)' },
+    green:  { id: 'aqz-KE-bpKQ', label: 'Big Buck Bunny (4K ancla)' },
+    yellow: { id: 'aqz-KE-bpKQ', label: '(reemplazar por tu vídeo)' },
+    blue:   { id: 'aqz-KE-bpKQ', label: '(reemplazar por tu vídeo)' }
+  };
+  var current = TEST.green;
+
+  var KEYS = {
+    ENTER: 13, BACK: 10009, RETURN: 10182,
+    LEFT: 37, RIGHT: 39, PLAY_PAUSE: 10252, PLAY: 415, PAUSE: 19,
+    RED: 403, GREEN: 404, YELLOW: 405, BLUE: 406
+  };
+
+  // Register TV media/color keys so the remote actually delivers them.
+  try {
+    if (window.tizen && tizen.tvinputdevice) {
+      ['MediaPlayPause','MediaPlay','MediaPause',
+       'ColorF0Red','ColorF1Green','ColorF2Yellow','ColorF3Blue']
+      .forEach(function(k){ try { tizen.tvinputdevice.registerKey(k); } catch(e){} });
+    }
+  } catch(e) {}
+
+  var player = null, ready = false;
+
+  // Show the real origin YouTube will see — this is the key diagnostic for error 153.
+  var ORIGIN = location.origin;
+  document.getElementById('origin').textContent = (ORIGIN || '(vacío)') + '  href=' + location.href.slice(0, 40);
+  var HTTP_ORIGIN = (location.protocol === 'http:' || location.protocol === 'https:') ? ORIGIN : null;
+
+  // Load the IFrame Player API.
+  (function(){
+    var s = document.createElement('script');
+    s.src = 'https://www.youtube.com/iframe_api';
+    s.onerror = function(){ setErr('NO SE PUDO CARGAR iframe_api (red/CORS)'); };
+    document.head.appendChild(s);
+  })();
+
+  // YT calls this global when the API is ready.
+  window.onYouTubeIframeAPIReady = function(){
+    player = new YT.Player('player', {
+      width: '1920', height: '1080',
+      videoId: current.id,
+      playerVars: (function(){
+        var pv = { autoplay: 1, controls: 0, rel: 0, fs: 0,
+                   playsinline: 1, modestbranding: 1, iv_load_policy: 3, vq: 'hd1080' };
+        // The standard fix for error 153: pass an explicit origin.
+        if (HTTP_ORIGIN) pv.origin = HTTP_ORIGIN;
+        return pv;
+      })(),
+      events: {
+        onReady: onReady,
+        onStateChange: onState,
+        onPlaybackQualityChange: refresh,
+        onError: onError
+      }
+    });
+  };
+
+  function onReady(){
+    ready = true;
+    document.getElementById('vid').textContent = current.label;
+    try { player.playVideo(); } catch(e){}
+    setInterval(refresh, 700);
+  }
+
+  var STATE = {'-1':'sin iniciar','0':'FIN','1':'reproduciendo','2':'pausa','3':'buffering','5':'en cola'};
+
+  function onState(e){
+    document.getElementById('state').textContent = STATE[String(e.data)] || e.data;
+    refresh();
+  }
+
+  function onError(e){
+    var map = {2:'ID inválido', 5:'error HTML5 player',
+               100:'vídeo no encontrado/privado',
+               101:'EMBED PROHIBIDO por el autor',
+               150:'EMBED PROHIBIDO por el autor'};
+    setErr('onError ' + e.data + ' — ' + (map[e.data] || 'desconocido'));
+  }
+
+  function setErr(msg){ document.getElementById('err').textContent = msg || ''; }
+
+  function refresh(){
+    if (!player || !ready) return;
+    try {
+      var q = player.getPlaybackQuality ? player.getPlaybackQuality() : '?';
+      document.getElementById('curq').textContent = prettyQ(q) + '  (' + q + ')';
+    } catch(e){}
+    try {
+      var levels = player.getAvailableQualityLevels ? player.getAvailableQualityLevels() : [];
+      document.getElementById('avail').textContent = levels.length ? levels.join(', ') : '(aún no)';
+    } catch(e){}
+    try {
+      var f = player.getVideoLoadedFraction ? player.getVideoLoadedFraction() : 0;
+      document.getElementById('buf').textContent = Math.round(f*100) + '%';
+    } catch(e){}
+    try {
+      var c = player.getCurrentTime ? player.getCurrentTime() : 0;
+      var d = player.getDuration ? player.getDuration() : 0;
+      document.getElementById('time').textContent = fmt(c) + ' / ' + fmt(d);
+    } catch(e){}
+  }
+
+  function prettyQ(q){
+    return ({tiny:'144p', small:'240p', medium:'360p', large:'480p',
+             hd720:'720p', hd1080:'1080p', hd1440:'1440p', hd2160:'2160p/4K',
+             highres:'>1080p'}[q]) || q;
+  }
+  function fmt(s){ s=Math.floor(s||0); var m=Math.floor(s/60), x=s%60;
+    return m + ':' + (x<10?'0':'') + x; }
+
+  function loadVideo(t){
+    current = t;
+    setErr('');
+    document.getElementById('vid').textContent = t.label;
+    document.getElementById('curq').textContent = '— cargando —';
+    if (player && player.loadVideoById) player.loadVideoById(t.id);
+  }
+
+  document.addEventListener('keydown', function(e){
+    var c = e.keyCode;
+    switch (c) {
+      case KEYS.ENTER:
+      case KEYS.PLAY_PAUSE:
+        e.preventDefault();
+        if (!player) return;
+        var st = player.getPlayerState();
+        if (st === 1) player.pauseVideo(); else player.playVideo();
+        break;
+      case KEYS.PLAY:  if (player) player.playVideo();  break;
+      case KEYS.PAUSE: if (player) player.pauseVideo(); break;
+      case KEYS.LEFT:
+        e.preventDefault();
+        if (player) player.seekTo(Math.max(0, player.getCurrentTime() - 10), true);
+        break;
+      case KEYS.RIGHT:
+        e.preventDefault();
+        if (player) player.seekTo(player.getCurrentTime() + 30, true);
+        break;
+      case KEYS.RED:    loadVideo(TEST.red);    break;
+      case KEYS.GREEN:  loadVideo(TEST.green);  break;
+      case KEYS.YELLOW: loadVideo(TEST.yellow); break;
+      case KEYS.BLUE:   loadVideo(TEST.blue);   break;
+      case KEYS.BACK:
+      case KEYS.RETURN:
+        e.preventDefault();
+        location.reload();
+        break;
+    }
+  });
+</script>
+</body>
+</html>
