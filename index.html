@@ -1,105 +1,16 @@
 <!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=1920, height=1080">
-<title>RicPlayer player (hosted)</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 1920px; height: 1080px; background: #000; overflow: hidden;
-               font-family: Arial, Helvetica, sans-serif; color: #fff; }
-  #player { position: absolute; inset: 0; width: 1920px; height: 1080px; }
-  /* Fixed px in the 1920-wide space (proven to fill the screen on this TV). */
-  #hud {
-    position: absolute; top: 40px; left: 40px; z-index: 10;
-    width: 1200px; box-sizing: border-box;
-    background: rgba(0,0,0,0.78); border: 4px solid #3ea6ff; border-radius: 18px;
-    padding: 30px 40px; line-height: 1.5; font-size: 40px;
-  }
-  #hud .big { font-size: 72px; font-weight: bold; color: #3ea6ff; margin-bottom: 14px; }
-  #hud .row { display: flex; justify-content: space-between; gap: 40px; margin-top: 10px; }
-  #hud .k { color: #9aa0a6; flex: 0 0 auto; }
-  #hud .v { color: #fff; font-weight: bold; text-align: right; word-break: break-all; }
-  #hud .err { color: #ff6b6b; font-weight: bold; }
-</style>
-</head>
-<body>
-  <div id="player"></div>
-  <div id="hud">
-    <div class="row"><span>Calidad ACTUAL</span></div>
-    <div class="big" id="curq">— cargando —</div>
-    <div class="row"><span class="k">Estado</span><span class="v" id="state">-</span></div>
-    <div class="row"><span class="k">Disponibles</span><span class="v" id="avail">-</span></div>
-    <div class="row"><span class="k">Buffer</span><span class="v" id="buf">-</span></div>
-    <div class="row"><span class="k">Tiempo</span><span class="v" id="time">-</span></div>
-    <div class="row"><span class="k">Origen</span><span class="v" id="origin" style="font-size:22px">-</span></div>
-    <div class="row"><span class="err" id="err"></span></div>
-  </div>
-
-<script>
-  var TEST = {
-    red:    { id: 'jNQXAC9IVRw', label: 'Me at the zoo (240p)' },
-    green:  { id: 'aqz-KE-bpKQ', label: 'Big Buck Bunny (4K ancla)' },
-    yellow: { id: 'aqz-KE-bpKQ', label: '(reemplazar)' },
-    blue:   { id: 'aqz-KE-bpKQ', label: '(reemplazar)' }
-  };
-  var current = TEST.green;
-  var player = null, ready = false;
-
-  document.getElementById('origin').textContent = location.origin;
-  var HTTP_ORIGIN = (location.protocol === 'http:' || location.protocol === 'https:') ? location.origin : null;
-
-  (function(){
-    var s = document.createElement('script');
-    s.src = 'https://www.youtube.com/iframe_api';
-    s.onerror = function(){ setErr('NO SE PUDO CARGAR iframe_api'); };
-    document.head.appendChild(s);
-  })();
-
-  window.onYouTubeIframeAPIReady = function(){
-    player = new YT.Player('player', {
-      width: '1920', height: '1080', videoId: current.id,
-      playerVars: (function(){
-        var pv = { autoplay: 1, controls: 0, rel: 0, fs: 0, playsinline: 1, modestbranding: 1, iv_load_policy: 3 };
-        if (HTTP_ORIGIN) pv.origin = HTTP_ORIGIN;
-        return pv;
-      })(),
-      events: { onReady: onReady, onStateChange: onState, onPlaybackQualityChange: refresh, onError: onError }
-    });
-  };
-
-  function onReady(){ ready = true; document.getElementById('vid'); try { player.playVideo(); } catch(e){} setInterval(refresh, 700); }
-  var STATE = {'-1':'sin iniciar','0':'FIN','1':'reproduciendo','2':'pausa','3':'buffering','5':'en cola'};
-  function onState(e){ document.getElementById('state').textContent = STATE[String(e.data)] || e.data; refresh(); }
-  function onError(e){
-    var map = {2:'ID invalido',5:'error HTML5',100:'no encontrado',101:'EMBED PROHIBIDO',150:'EMBED PROHIBIDO'};
-    setErr('onError ' + e.data + ' - ' + (map[e.data] || '?'));
-  }
-  function setErr(m){ document.getElementById('err').textContent = m || ''; }
-  function refresh(){
-    if (!player || !ready) return;
-    try { var q = player.getPlaybackQuality(); document.getElementById('curq').textContent = prettyQ(q) + '  (' + q + ')'; } catch(e){}
-    try { var lv = player.getAvailableQualityLevels(); document.getElementById('avail').textContent = lv.length ? lv.join(', ') : '(aun no)'; } catch(e){}
-    try { document.getElementById('buf').textContent = Math.round(player.getVideoLoadedFraction()*100) + '%'; } catch(e){}
-    try { document.getElementById('time').textContent = fmt(player.getCurrentTime()) + ' / ' + fmt(player.getDuration()); } catch(e){}
-  }
-  function prettyQ(q){ return ({tiny:'144p',small:'240p',medium:'360p',large:'480p',hd720:'720p',hd1080:'1080p',hd1440:'1440p',hd2160:'2160p/4K',highres:'>1080p'}[q]) || q; }
-  function fmt(s){ s=Math.floor(s||0); var m=Math.floor(s/60),x=s%60; return m+':'+(x<10?'0':'')+x; }
-
-  function doKey(code){
-    if (!player) return;
-    if (code === 'play')  { var st = player.getPlayerState(); if (st===1) player.pauseVideo(); else player.playVideo(); }
-    if (code === 'left')  player.seekTo(Math.max(0, player.getCurrentTime()-10), true);
-    if (code === 'right') player.seekTo(player.getCurrentTime()+30, true);
-    if (TEST[code]) { current = TEST[code]; setErr(''); document.getElementById('curq').textContent='— cargando —'; player.loadVideoById(TEST[code].id); }
-  }
-  // Local keydown (if focus is here) + commands forwarded by the parent window.
-  document.addEventListener('keydown', function(e){ mapKey(e.keyCode, e); });
-  window.addEventListener('message', function(e){ if (e.data && e.data.ricKey != null) mapKey(e.data.ricKey); });
-  function mapKey(c, e){
-    var K = {13:'play',10252:'play',415:'play',37:'left',39:'right',403:'red',404:'green',405:'yellow',406:'blue'};
-    if (K[c]) { if (e) e.preventDefault(); doKey(K[c]); }
-  }
-</script>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;background:#0a8a30;color:#fff;font-family:Arial;overflow:hidden">
+  <div id="d" style="position:absolute;top:20px;left:20px;font-size:160px;font-weight:bold;line-height:1.1">?</div>
+  <div id="d2" style="position:absolute;bottom:20px;left:20px;font-size:70px">origen: ...</div>
+  <div style="position:absolute;top:50%;right:30px;width:300px;height:300px;background:red;border:20px solid yellow"></div>
+  <script>
+    document.getElementById('d').textContent =
+      'inner ' + window.innerWidth + 'x' + window.innerHeight +
+      '  |  screen ' + screen.width + 'x' + screen.height +
+      '  |  dpr ' + window.devicePixelRatio;
+    document.getElementById('d2').textContent = 'origen: ' + location.origin + location.pathname + location.search;
+  </script>
 </body>
 </html>
